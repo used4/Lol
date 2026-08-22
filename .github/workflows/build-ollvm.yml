@@ -1,0 +1,66 @@
+name: Build OLLVM Plugin
+
+on:
+  workflow_dispatch:   # يسمح بتشغيله يدويًا من تبويب Actions
+
+jobs:
+  build:
+    runs-on: ubuntu-22.04
+    steps:
+      - name: Install build dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y cmake ninja-build git build-essential
+
+      - name: Clone LLVM project (llvmorg-9.0.1)
+        run: |
+          git clone --depth 1 --branch llvmorg-9.0.1 \
+            https://github.com/llvm/llvm-project.git llvm-project
+
+      - name: Configure LLVM build
+        run: |
+          mkdir -p llvm-project/build
+          cd llvm-project/build
+          cmake -G Ninja \
+            -DLLVM_ENABLE_PROJECTS=clang \
+            -DCMAKE_BUILD_TYPE=Release \
+            -DCMAKE_INSTALL_PREFIX=$GITHUB_WORKSPACE/llvm9-install \
+            ../llvm
+
+      - name: Build LLVM (ninja)
+        run: |
+          cd llvm-project/build
+          ninja -j$(nproc)
+
+      - name: Install LLVM locally
+        run: |
+          cd llvm-project/build
+          ninja install
+
+      - name: Clone obfuscator-llvm plugin
+        run: |
+          git clone https://github.com/eshard/obfuscator-llvm.git obfuscator-llvm
+
+      - name: Configure plugin build
+        run: |
+          mkdir -p obfuscator-llvm/build
+          cd obfuscator-llvm/build
+          cmake -G Ninja \
+            -DLLVM_DIR=$GITHUB_WORKSPACE/llvm9-install/lib/cmake/llvm \
+            ..
+
+      - name: Build plugin (ninja)
+        run: |
+          cd obfuscator-llvm/build
+          ninja -j$(nproc)
+
+      - name: Verify output exists
+        run: |
+          ls -la obfuscator-llvm/build/libLLVMObfuscator.so
+
+      - name: Upload plugin as artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: libLLVMObfuscator
+          path: obfuscator-llvm/build/libLLVMObfuscator.so
+          retention-days: 14
